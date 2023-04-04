@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Wordle</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      text-align: center;
+    }
+
+    hr {
+      width: 90%;
+      max-width: 500px;
+    }
+
+    h1 {
+      font-size: 36px;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    #keyboard {
+      display: flex;
+      flex-wrap: wrap;
+      margin: 0 auto;
+      width: 80%;
+      max-width: 300px;
+      height: 250px;
+    }
+
+    #keyboard span {
+      box-sizing: border-box;
+      width: 15%;
+      height: 40px;
+      margin: 0 auto;
+      text-align: center;
+      line-height: 40px;
+      border-style: solid;
+      border-color: #333333;
+    }
+
+    #grid {
+      display: flex;
+      flex-wrap: wrap;
+      width: 80%;
+      max-width: 300px;
+      height: 300px;
+      margin: 0 auto;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    #grid span {
+      width: 18%;
+      height: 40px;
+      margin: 0 auto;
+      text-align: center;
+      line-height: 40px;
+      border-style: solid;
+      border-color: #333333;
+    }
+    .correct {
+      background-color: #6AAA64;
+      color: white;
+      border-color: white;
+    }
+    .present {
+      background-color: #C9B458;
+      color: white;
+      border-color: white;
+    }
+    .absent {
+      background-color: #787C7E;
+      color: white;
+      border-color: white;
+    }
+  </style>
+  <script>
+
+    const game = new Game();
+    const board = [];
+    const keyBoard = [];
+    var keyBoardElement = null;
+    let responseObj = {};
+
+    // get random word API: https://rapidapi.com/sheharyar566/api/random-words5
+    // this API let you generate random word with required word length
+    function getRandomWord () {
+      const data = null;
+
+      const xhr = new XMLHttpRequest();
+      xhr.withCredentials = true;
+
+      xhr.addEventListener("readystatechange", function () {
+        if (this.readyState === this.DONE) {
+          game.word = [...this.responseText];
+          console.log(this.responseText);
+        }
+      });
+
+      xhr.open("GET", "https://random-words5.p.rapidapi.com/getRandom?wordLength=5");
+      xhr.setRequestHeader("X-RapidAPI-Key", "533124a70emsha3a8339844a946ep14de89jsn7edd54e6cd67");
+      xhr.setRequestHeader("X-RapidAPI-Host", "random-words5.p.rapidapi.com");
+
+      xhr.send(data);
+    }
+    getRandomWord();
+
+    // API to check if the word is valid: https://api.dictionaryapi.dev
+    // this is a dictionary with a lot of information about words (synonyms, validity, etc)
+    function loadDoc(guess) {
+      const xhttp = new XMLHttpRequest();
+      xhttp.onload = function () {
+        responseObj = xhttp.response;
+        if (responseObj.title !== "No Definitions Found") {
+          findMatches(guess,game.word);
+        } else {
+          alert (guess.join('')+" - not a valid word")
+        }
+      }
+      xhttp.open("GET", "https://api.dictionaryapi.dev/api/v2/entries/en/"+guess.join(''));
+      xhttp.responseType = 'json';
+      xhttp.send();
+    }
+
+    // single SPAN element on the page represents a single cell/key
+    function Block (type) {
+      this.type = type; // type could be a "keyboard" or "Board"
+      this.generateBlock = () => document.createElement("span");
+      this.generateContent = (content) => document.createTextNode(content);
+      this.updateColor = function (index, style) {
+        let span = document.getElementById(type).children;
+        span[index].classList.add(style);
+      }
+    }
+
+
+    // Game
+    function Game () {
+      this.alphabet = [...'abcdefghijklmnopqrstuvwxyz', "Enter", 'Del'];
+      // create an array to store objects
+      this.grid = new Array(30).fill("");
+      this.word = [];
+      this.row = 0;
+      this.col = 0;
+      this.width = 5;
+      this.guess = [];
+      this.numberOfMatches = 0;
+      this.losses = 0;
+      this.wins = 0;
+      this.update = function (content) {
+        document.getElementById(this.col+this.row*5).innerHTML = content;
+      }
+      this.validateGuess = function () {
+        if (this.guess.length === 5) {
+          loadDoc(this.guess);
+        } else {
+          alert ('not a valid word');
+        }
+      }
+      // check if the row < 5 and number of correct letters is 5
+      this.gameOver = function () {
+        if (this.numberOfMatches === 5) {
+          setTimeout(function() { alert("You Win"); }, 1000);
+          keyBoardElement.removeEventListener("click", virtualKeyboard);
+          updateScore("wins");
+        } else if (this.row  === 5) {
+          setTimeout(function() { alert("Game Over"); }, 1000);
+          keyBoardElement.removeEventListener("click", virtualKeyboard);
+          updateScore("losses");
+        } else {
+          game.row +=1;
+          game.col = 0;
+          game.guess = [];
+          game.numberOfMatches = 0;
+        }
+      }
+      // add debug
+      this.debug = function () {
+        document.getElementById("hint").innerHTML = game.word.join('');
+      }
+    }
+
+    function init() {
+
+      keyBoardElement = document.getElementById("keyboard");
+      keyBoardElement.addEventListener("click", virtualKeyboard);
+      document.getElementById("debug").addEventListener("click", game.debug);
+
+      function createBoard (parentId, index) {
+        let node = board[index].generateBlock();
+        let content = board[index].generateContent(game.grid[index]);
+        document.getElementById(parentId).appendChild(node);
+        node.setAttribute("id", index);
+        node.appendChild(content);
+        if (parentId === "keyboard") {
+          let letter = board[index].generateContent(game.alphabet[index]);
+          node.appendChild(letter);
+        }
+      }
+
+      game.grid.forEach((element, index) => {
+        // create object block and add store it to array Board
+        board.push(new Block("grid"));
+        createBoard(board[index].type, index)
+      })
+      game.alphabet.forEach((element, index) => {
+        keyBoard.push(new Block("keyboard"));
+        createBoard(keyBoard[index].type, index);
+      })
+
+      // display SCORE:
+      document.getElementById("losses").innerHTML = localStorage.getItem("losses");
+      document.getElementById("wins").innerHTML = localStorage.getItem("wins");
+    }
+
+    function setValue (input) {
+      if(game.col < game.width)  {
+        game.update(input);
+        game.guess.push(input);
+        game.col += 1;
+      }
+    }
+    function deleteValue() {
+      if( 0 < game.col && game.col <= game.width)  {
+        game.col -= 1;
+      }
+      game.update('');
+      game.guess.splice(-1);
+    }
+
+    function virtualKeyboard (e) {
+      if (e.target.nodeName === "SPAN") {
+        if (e.target.innerText === "Enter") {
+          game.validateGuess()
+        }
+        else if (e.target.innerText === "Del") {
+          deleteValue("empty")
+        } else {
+          setValue(e.target.innerText)
+        }
+      }
+    }
+    // key - "win" or "loss"
+    function updateScore (key) {
+      if(localStorage.getItem(key)){
+        game[key] = parseInt(localStorage.getItem(key));
+      } else {
+        localStorage.setItem(key, game[key])
+      }
+      if (key === "wins") {
+        game.wins += 1;
+        document.getElementById("wins").innerHTML = game.wins;
+      } else if (key === "losses") {
+        game.losses -= 1;
+        document.getElementById("losses").innerHTML = game.losses;
+      }
+      localStorage.setItem(key, game[key]);
+    }
+
+    // match word passed by user with original word
+    function findMatches (guess, word) {
+      for (let i = 0; i < 5; i ++) {
+        const match = word.indexOf(guess[i]);
+        let keyIndex = game.alphabet.indexOf(guess[i]);
+        if (match !== -1) {
+          if (match === i) {
+            // letter found in the same position
+            board[i].updateColor(i + game.row*5, 'correct');
+            // find index of current letter in the keyboard array:
+            keyBoard[keyIndex].updateColor(keyIndex, 'correct');
+            //array with correct letters
+            game.numberOfMatches += 1;
+            continue;
+          }
+          board[i].updateColor(i + game.row*5, 'present');
+          keyBoard[keyIndex].updateColor(keyIndex, 'present');
+        } else {
+          board[i].updateColor(i + game.row*5, 'absent');
+          keyBoard[keyIndex].updateColor(keyIndex, 'absent');
+        }
+      }
+      game.gameOver();
+    }
+
+    window.onload = () => init();
+
+  </script>
+</head>
+<body>
+<h1>Wordle</h1>
+<hr>
+<br>
+<div id = "grid"></div>
+<hr>
+<br>
+<p></p>
+<div id = "keyboard"></div>
+<hr>
+<p></p>
+<button id="debug">Debug</button>
+<div id="hint"></div>
+<div>WINS:
+  <div id="wins"></div>
+</div>
+<div>LOSSES:
+  <div id="losses"></div>
+</div>
+</body>
+</html>
